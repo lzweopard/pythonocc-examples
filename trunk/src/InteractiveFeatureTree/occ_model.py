@@ -81,6 +81,7 @@ class ProcessObject(HasTraits):
         
     def on_modify(self, vnew):
         if vnew:
+            self.modified = False
             self.modified = True
         
     def _get_shape(self):
@@ -167,10 +168,12 @@ class BlockSource(TopologySource):
                        'dims',
                        'position',
                        'x_axis',
-                       'z_axis')
+                       'z_axis',
+                       'modified')
     
     @on_trait_change("dims, position, x_axis, z_axis")
     def on_edit(self):
+        self.modified = False
         self.modified = True
 
     def execute(self):
@@ -189,10 +192,12 @@ class SphereSource(TopologySource):
     
     traits_view = View('name',
                        'radius',
-                       'position')
+                       'position',
+                       'modified')
     
     @on_trait_change("radius, position")
     def on_edit(self):
+        self.modified = False
         self.modified = True
         
     def execute(self):
@@ -214,10 +219,12 @@ class BooleanOpFilter(FilterSource):
            'fuse': BRepAlgoAPI.BRepAlgoAPI_Fuse,
            'common': BRepAlgoAPI.BRepAlgoAPI_Common}
     
-    traits_view = View('operation')
+    traits_view = View('operation',
+                       'modified')
     
     def _operation_changed(self, vnew):
         self.name = "Boolean Op: %s"%vnew
+        self.modified = False
         self.modified = True
         
     def execute(self):
@@ -295,9 +302,11 @@ class ChamferFilter(FilterSource):
     selector = Instance(TNaming.TNaming_Selector)
     
     traits_view = View('edge_id',
-                       'size')
+                       'size',
+                       'modified')
     
     def _size_changed(self, new_size):
+        self.modified = False
         self.modified = True
     
     @on_trait_change("input, edge_id, label")
