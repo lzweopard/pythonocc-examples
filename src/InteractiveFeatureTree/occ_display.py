@@ -11,10 +11,10 @@ from occ_model import Input, ProcessObject
 
 import wx
 
-#Jelle please don't shout at me!
+
 import os
 CSF_GraphicShr = r"/usr/local/lib/libTKOpenGl.so"
-if os.path.exists(CSF_GraphicShr): #slightly safer
+if os.path.exists(CSF_GraphicShr) and os.environ['CSF_GraphicShr'] != '': #slightly safer
     os.environ['CSF_GraphicShr'] = CSF_GraphicShr
 
 
