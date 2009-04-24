@@ -1,11 +1,10 @@
 from enthought.traits.api import (HasTraits, Property, Bool, 
                         on_trait_change, cached_property, Instance,
-                        Float as _Float, List, Str, Enum, Int
-                                  )
+                        List, Str, Enum)
 
 from enthought.traits.ui.api import View, Item
 
-from utils import Tuple, EditorTraits
+from utils import Tuple, EditorTraits, Int, Float, Range
 
 from OCC import TDF, TopoDS, BRepPrimAPI, BRepAlgoAPI, gp, BRepFilletAPI,\
         TNaming, TopTools
@@ -15,11 +14,6 @@ from OCC.Utils.Topology import Topo
 ###defining an dedicated trait for filter inputs means 
 ###we can track input changes easily
 Input = Instance(klass="ProcessObject", process_input=True)
-
-
-class Float(EditorTraits, _Float):
-    """I define my own Float trait because I want to change the
-    default behaviour of the default editors to have auto_set=False"""
     
 
 class ProcessObject(HasTraits):
@@ -98,12 +92,19 @@ class ProcessObject(HasTraits):
         raise NotImplementedError
     
     def update_naming(self, make_shape):
-        """called within the Execute method"""
+        """called within the Execute method, to update the Naming
+        Structure. This is key to getting Topological Naming to work"""
         raise NotImplementedError
         
         
 class TopologySource(ProcessObject):
     def update_naming(self, make_shape):
+        """
+        Create named shapes for the created primitive and all the
+        sub-shapes we want to track (edges, in this case).
+        
+        In most application, one would want to track faces as well.
+        """
         label = self.label
         shape = make_shape.Shape()
         builder = TNaming.TNaming_Builder(label)
@@ -124,6 +125,9 @@ class FilterSource(ProcessObject):
         builder = TNaming.TNaming_Builder(label)
         builder.Generated(input_shape, shape)
         
+        #FindChild creates a new label, if one doesn't exist.
+        #Label entry numbers are not necessarily incremental.
+        #They are more like dictionary keys.
         gen_label = label.FindChild(1)
         mod_label = label.FindChild(2)
         del_label = label.FindChild(3)
@@ -297,11 +301,15 @@ class ChamferFilter(FilterSource):
     
     size = Float(1.0)
     
-    edge_id = Int(0)
+    _n_edges = Int(4)
+    
+    _low = Int(0)
+    
+    edge_id = Range(low='_low', high='_n_edges')
     
     selector = Instance(TNaming.TNaming_Selector)
     
-    traits_view = View('edge_id',
+    traits_view = View(Item('edge_id'),
                        'size',
                        'modified')
     
@@ -315,8 +323,6 @@ class ChamferFilter(FilterSource):
         input = self.input
         label = self.label
         
-        self.modified = True
-        
         if not all((input, label)): return
         
         input_shape = input.shape
@@ -326,7 +332,9 @@ class ChamferFilter(FilterSource):
         
         self.selector = selector
         
-        for i,edge in enumerate(Topo(input_shape).edges()):
+        topo = Topo(input_shape)
+        self._n_edges = topo.number_of_edges()
+        for i,edge in enumerate(topo.edges()):
             if i==new_id:
                 selector.Select(edge, input_shape)
                 print "got selection!"
@@ -334,9 +342,16 @@ class ChamferFilter(FilterSource):
         else:
             print "no selection"
             
+        self.modified = False
+        self.modified = True
+            
             
     def execute(self):
         input_shape = self.input.shape
+        
+        topo = Topo(input_shape)
+        self._n_edges = topo.number_of_edges()
+        
         builder = BRepFilletAPI.BRepFilletAPI_MakeChamfer(input_shape)
         
         Map = TDF.TDF_LabelMap()
@@ -349,7 +364,8 @@ class ChamferFilter(FilterSource):
         selector = self.selector
         ret = selector.Solve(Map)
         
-        print "solve OK", ret
+        if not ret:
+            raise Exception("Failed to solve for edge")
         
         nt = TNaming.TNaming_Tool()
         selected_shape = nt.CurrentShape(selector.NamedShape())
