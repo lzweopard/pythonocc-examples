@@ -1,11 +1,12 @@
-from enthought.traits.api import HasTraits, Instance, Event, List, Str, Button
+from enthought.traits.api import HasTraits, Instance, Event, \
+            List, Str, Button, Enum
 
 from enthought.traits.ui.api import CustomEditor, View, Item, TreeEditor, TreeNode,\
             VSplit, HSplit
 
 from OCC.Display.wxDisplay import wxViewer3d
 
-from OCC import AIS
+from OCC import AIS, Quantity, Graphic3d
 
 from occ_model import Input, ProcessObject
 
@@ -13,7 +14,7 @@ import wx
 
 
 import os
-CSF_GraphicShr = r"/usr/local/lib/libTKOpenGl.so"
+CSF_GraphicShr = r"/usr/local/lib/libTKOpenGl.so" #OK for linux
 if os.path.exists(CSF_GraphicShr) and os.environ['CSF_GraphicShr'] != '': #slightly safer
     os.environ['CSF_GraphicShr'] = CSF_GraphicShr
 
@@ -73,6 +74,10 @@ def MakeCanvas(parent, editor):
     
     return canvas
 
+ColorDict = dict((n[13:].lower(), getattr(Quantity, n))
+                 for n in dir(Quantity) 
+                  if n.startswith("Quantity_NOC_"))
+
 
 class DisplayShape(HasTraits):
     """
@@ -89,8 +94,13 @@ class DisplayShape(HasTraits):
     _input = List
 
     ais_shape = Instance(AIS.AIS_Shape)
+    
+    #sets the diffusive color of the shape
+    color = Enum(*sorted(ColorDict.keys()))
 
     render = Event
+    
+    traits_view = View(Item('color'))
 
     def _input_changed(self, name, vold, vnew):
         if vold is not None:
@@ -104,8 +114,22 @@ class DisplayShape(HasTraits):
             self.ais_shape.Set(shape)
             self.render = True
             
+    def _color_default(self):
+        return "plum1"
+            
     def _ais_shape_default(self):
-        return AIS.AIS_Shape(self.input.shape)
+        ais_shape = AIS.AIS_Shape(self.input.shape)
+        #The default material is too shiny to show the object
+        #color well, so I set it to something less reflective
+        ais_shape.SetMaterial(Graphic3d.Graphic3d_NOM_SATIN)
+        ais_shape.SetColor(ColorDict[self.color])
+        return ais_shape
+    
+    def _color_changed(self, new_color):
+        c = Quantity.Quantity_Color(ColorDict[new_color])
+        self.ais_shape.SetColor(c)
+        self.render = True
+        
 
 
 class ShapeList(HasTraits):
@@ -126,8 +150,7 @@ occ_tree = TreeEditor(nodes=[
             TreeNode(node_for=[DisplayShape],
                      auto_open=True,
                      children='_input',
-                     label='name',
-                     view=View() ),
+                     label='name'),
             TreeNode(node_for=[ProcessObject],
                     auto_open=True,
                     children='_inputs',
